@@ -1,183 +1,220 @@
-#include <M5Stack.h> //ver 0.2.9
+//------------------------------------------------------------------//
+//Supported MCU:   ESP32 (M5Stack)
+//File Contents:   HoverSat EjectionSystem
+//Version number:  Ver.1.0
+//Date:            2019.12.29
+//------------------------------------------------------------------//
+ 
+//This program supports the following boards:
+//* M5Stack(Grey version)
+ 
+//Include
+//------------------------------------------------------------------//
+#include <M5Stack.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
- 
+#include <Wire.h>
+#include <time.h>
+#include "utility/MPU9250.h"
+
+//Define
+//------------------------------------------------------------------//
+#define TIMER_INTERRUPT       1
+
+#define NOOFPATTERNS 5
+int parameters[NOOFPATTERNS][2] =
+{
+// PWM, EjctionTime/10
+{ 20, 50 },
+{ 40, 50 },
+{ 60, 50 },
+{ 80, 50 },
+{ 100, 50 },
+};
+
+//Global
+//------------------------------------------------------------------//
 const char* ssid = "HoverSat-2019"; 
 const char* password = "root0123";
  
 const char * to_udp_address = "192.168.4.1";
 const int to_udp_port = 55555;
 const int my_server_udp_port = 55556;
+
+unsigned char udp_pattern = 0;
+unsigned char udp_aa = 0;
+unsigned char udp_bb = 0;
+unsigned char udp_flag = 0;
+
+unsigned char pattern = 0;
+bool log_flag = false;
+
+unsigned long time_ms;
+unsigned long time_buff = 0;
+volatile int interruptCounter;
+int iTimer10;
  
 WiFiUDP udp;
-TaskHandle_t task_handl; //マルチタスクハンドル定義
- 
-boolean connected = false;
-uint8_t receive_position_data = 0; //受信図形の座標位置
-uint8_t receive_direction = 0; //受信図形の動作方向変数
-uint8_t receive_color_data = 0; //受信図形のカラー番号
-uint8_t old_line_data = 0;
-uint8_t old_color_data = 0;
-boolean isDisp_ok = false; //ディスプレイ表示フラグ
-boolean isSet_send_data = false;
-boolean isSend_rect_move = false; //図形動作開始フラグ
-int16_t send_position = 0; //送信図形の座標位置
-uint8_t send_direction = 0; //送信図形の動作方向変数
-uint8_t send_color_num = 0; //送信図形のカラー番号
-uint32_t now_time = 0;
-int16_t interval = 100; //UDPデータ送信間隔
-uint8_t rect_width = 63; //図形の幅
-uint8_t rect_height = 100; //図形の高さ
-uint32_t color_data[7] = {TFT_WHITE,
-                          TFT_RED,
-                          TFT_GREEN,
-                          TFT_BLUE,
-                          TFT_YELLOW,
-                          TFT_MAGENTA,
-                          TFT_CYAN};
- 
+TaskHandle_t task_handl;
+hw_timer_t * timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Parameters
+unsigned char hover_val = 70;
+unsigned int ex_time = 100;
+unsigned char patternNo = 0;
+
+unsigned char flag = 0;
+
+//Prototype
+//------------------------------------------------------------------//
+void receiveUDP(void);
+void sendUDP(void);
+void setupWiFiUDPserver(void);
+void button_action(void);
+void taskDisplay(void *pvParameters);
+void IRAM_ATTR onTimer(void);
+void Timer_Interrupt(void);
+void LCD_Control(void);
+
+//Setup #1
+//------------------------------------------------------------------//
+void setup() {
+  M5.begin();
+  delay(1000);
+  setupWiFiUDPserver();
+  
+  xTaskCreatePinnedToCore(&taskDisplay, "taskDisplay", 4096, NULL, 10, &task_handl, 0);
+
+  // Initialize Timer Interrupt
+  timer = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer, &onTimer, true);
+  timerAlarmWrite(timer, TIMER_INTERRUPT * 1000, true);
+  timerAlarmEnable(timer); 
+  delay(500);
+}
+
+//Main #1
+//------------------------------------------------------------------//
+void loop() {
+  receiveUDP();
+  Timer_Interrupt(); 
+
+  switch (pattern) {
+    case 0:
+      break;
+
+    case 11:    
+      time_buff = millis();
+      pattern = 12;
+      break;
+
+    case 12:
+      if( millis() - time_buff >= ex_time*10 ) {
+        M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
+        pattern = 0;
+      }
+      break; 
+
+  }
+}
+
+//Main #0
+//------------------------------------------------------------------//
+void taskDisplay(void *pvParameters){
+  while(1){    
+    M5.update();
+    button_action();
+    LCD_Control();
+    delay(100);
+  }
+}
+
+// Timer Interrupt
+//------------------------------------------------------------------//
+void Timer_Interrupt( void ){
+  if (interruptCounter > 0) {
+
+    portENTER_CRITICAL(&timerMux);
+    interruptCounter--;
+    portEXIT_CRITICAL(&timerMux);
+
+  }
+}
+
+// IRAM
+//------------------------------------------------------------------//
+void IRAM_ATTR onTimer() {
+  portENTER_CRITICAL_ISR(&timerMux);
+  interruptCounter=1;
+  portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+// LCD_Control
+//------------------------------------------------------------------//
+void LCD_Control() {
+  M5.Lcd.fillRect(0, 0, 80, 80, TFT_WHITE);
+  M5.Lcd.fillRect(80, 0, 240, 80, TFT_DARKGREY);
+  M5.Lcd.fillRect(0, 80, 80, 160, TFT_DARKGREY);
+  M5.Lcd.setTextSize(5);
+  M5.Lcd.setCursor(13, 23);
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.print("Ej");
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.setCursor(96, 30);
+  M5.Lcd.setTextColor(WHITE);
+  M5.Lcd.printf("PWM      %3d", parameters[patternNo][0]);
+  M5.Lcd.setCursor(15, 120);
+  M5.Lcd.print("No.");
+  M5.Lcd.setTextSize(5);
+  M5.Lcd.setCursor(10, 160);
+  M5.Lcd.printf("%2d", patternNo+1);
+
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(96, 112);
+  M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]*10);
+
+}
 
 void receiveUDP(){
-  if(!isDisp_ok){
-    if(connected){
-      int packetSize = udp.parsePacket();
-      if(packetSize > 0){
-        receive_position_data = udp.read();
-        receive_direction = udp.read();
-        receive_color_data = udp.read();
-        //Serial.printf("receive_position_data=%d, receive_direction=%d, receive_color_data=%d\r\n", receive_position_data, receive_direction, receive_color_data);
-        isDisp_ok = true;
-      }
-    }
+  int packetSize = udp.parsePacket();
+  if(packetSize > 0){
+    pattern = udp.read();
+    udp_aa = udp.read();
+    udp_bb = udp.read();
+    udp_flag = udp.read();
   }
 }
  
 void sendUDP(){
-  if(isSet_send_data){
-    udp.beginPacket(to_udp_address, to_udp_port);
-    udp.write((uint8_t)send_position);
-    udp.write(send_direction);
-    udp.write(send_color_num);
-    //Serial.printf("send_position=%d, send_color_num=%d\r\n", send_position, send_color_num);
-    udp.endPacket();
-    isSet_send_data = false;
-  }
+  udp.beginPacket(to_udp_address, to_udp_port);
+  udp.write(udp_pattern);
+  udp.write(udp_aa);
+  udp.write(udp_bb);
+  udp.write(udp_flag);
+  udp.endPacket();
 }
  
-void autoIncDec(int16_t interval) {
-  if(millis() - now_time > interval){
-    if(send_direction){
-      send_position++;
-      if(send_position > 255) {
-        send_position = 255;
-        send_direction = 0;
-      }
-    }else{
-      send_position--;
-      if(send_position < 0) {
-        send_position = 0;
-        send_direction = 1;
-      }
-    }
-    isSet_send_data = true;
-    now_time = millis();
-  }
-}
- 
-
-void WiFiEvent(WiFiEvent_t event){
-  IPAddress myIP = WiFi.localIP();
-  switch(event) {
-    case SYSTEM_EVENT_STA_GOT_IP:
-      Serial.println("WiFi connected!");
-      Serial.print("My IP address: ");
-      Serial.println(myIP);
-      //udp.begin関数は自サーバーの待ち受けポート開放する関数である
-      udp.begin(myIP, my_server_udp_port);
-      delay(1000);
-      connected = true;
-      break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-      Serial.println("WiFi lost connection");
-      connected = false;
-      break;
-    default:
-      break;
-  }
-}
-
-void connectToWiFi(){
-  Serial.println("Connecting to WiFi network: " + String(ssid));
+void setupWiFiUDPserver(){
   WiFi.disconnect(true, true);
+  WiFi.softAP(ssid, password);
+  IPAddress myIP = WiFi.softAPIP();
+  udp.begin(myIP, my_server_udp_port);
   delay(1000);
-  WiFi.onEvent(WiFiEvent);
-  WiFi.begin(ssid, password);
-  Serial.println("Waiting for WIFI connection...");
 }
  
 void button_action(){
-  if (M5.BtnA.wasReleased()) {
-    if(send_direction) {
-      send_direction = 0;
-    }else{
-      send_direction = 1;
-    }
-    isSend_rect_move = true;
-  } else if (M5.BtnB.wasReleased()) {
-    send_color_num++;
-    if(send_color_num > 6) send_color_num = 0;
-    isSet_send_data = true;
-  } else if (M5.BtnC.wasReleased()) {
-    interval = interval - 5;
-    if(interval < 0) interval = 0;
-    Serial.printf("interval=%d\r\n", interval);
-  } else if (M5.BtnC.pressedFor(500)) {
-    interval = 100;
-    Serial.printf("interval=%d\r\n", interval);
-    now_time = millis();
+  if (M5.BtnA.isPressed()) {
+  } else if (M5.BtnB.isPressed()) {
+  } else if (M5.BtnC.isPressed()) {
+    udp_pattern = 11;
+    udp_aa = 12;
+    udp_bb = 13;
+    udp_flag = 0;
+    sendUDP();
+    delay(1000);
+    pattern = 11;
   }
-}
+} 
 
-//******** core 0 task *************
-void taskDisplay(void *pvParameters){
-  M5.begin();
-  M5.Lcd.fillScreen(TFT_BLACK);
-  M5.Lcd.fillRect(0, 50, rect_width, rect_height, TFT_WHITE);
-  while(true){
-    M5.update(); //Update M5Stack button state
-    if(isDisp_ok){
-      if(old_line_data != receive_position_data || old_color_data != receive_color_data){
-        if(receive_direction){
-          M5.Lcd.fillRect(old_line_data, 50, receive_position_data - old_line_data, rect_height, TFT_BLACK);
-        }else{
-          M5.Lcd.fillRect(receive_position_data + rect_width, 50, old_line_data + rect_width, rect_height, TFT_BLACK);
-        }
-        M5.Lcd.fillRect(receive_position_data, 50, rect_width, rect_height, color_data[receive_color_data]);
-        old_line_data = receive_position_data;
-        old_color_data = receive_color_data;
-      }
-      isDisp_ok = false;
-    }
-    button_action();
-    delay(1);
-  }
-}
-//***********************************
 
-//********* core 1 task ***************
-void setup(){
-  Serial.begin(115200);
-  delay(1000);
-  connectToWiFi();
-  while(!connected){
-    delay(1);
-  }
-  xTaskCreatePinnedToCore(&taskDisplay, "taskDisplay", 8192, NULL, 10, &task_handl, 0);
-  delay(500); //これ重要。別タスクでM5.begin関数が起動するまで待つ。
-}
- 
-void loop(){
-  receiveUDP();
-  if(isSend_rect_move) autoIncDec(interval);
-  sendUDP();
-}
