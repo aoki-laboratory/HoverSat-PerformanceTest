@@ -82,6 +82,11 @@ File file;
 String fname_buff;
 const char* fname;
 
+// Battery
+unsigned int cnt_battery;
+unsigned char battery_status;
+unsigned char battery_persent;
+
 // Parameters
 unsigned char hover_val = 70;
 bool hover_flag = false;
@@ -101,6 +106,7 @@ void Timer_Interrupt(void);
 void LCD_Control(void);
 void connectToWiFi(void);
 void WiFiEvent(WiFiEvent_t event);
+uint8_t getBatteryGauge();
 
 //Setup #1
 //------------------------------------------------------------------//
@@ -231,6 +237,37 @@ void taskDisplay(void *pvParameters){
 
      core0_pattern++;
     delay(1);
+    cnt_battery++;
+    if( cnt_battery >= 5000 && !log_flag ) {
+      M5.Lcd.setTextSize(2);
+      M5.Lcd.setCursor(280, 2);
+      M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.printf("%3d",battery_persent);
+      battery_status = getBatteryGauge();
+      switch (battery_status) {
+      case 0xF0:
+        battery_persent = 0;
+        break;
+      case 0xE0:
+        battery_persent = 25;
+        break;
+      case 0xC0:
+        battery_persent = 50;
+        break;
+      case 0x80:
+        battery_persent = 75;
+        break;
+      case 0x00:
+        battery_persent = 100;
+        break;        
+      }
+      M5.Lcd.setTextSize(2);
+      M5.Lcd.setCursor(280, 2);
+      M5.Lcd.setTextColor(BLACK);
+      M5.Lcd.printf("%3d",battery_persent);
+      cnt_battery = 0;
+    }
+    
   }
 }
 
@@ -415,4 +452,13 @@ void button_action(){
   }
 } 
 
+uint8_t getBatteryGauge() {
+  Wire.beginTransmission(0x75);
+  Wire.write(0x78);
+  Wire.endTransmission(false);
+  if(Wire.requestFrom(0x75, 1)) {
+    return Wire.read();
+  }
+  return 0xff;
+}
 
