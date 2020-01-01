@@ -54,6 +54,8 @@ unsigned char core0_pattern = 0;
 unsigned long time_ms;
 unsigned long time_buff = 0;
 unsigned long time_buff2 = 0;
+unsigned long time_buff3 = 0;
+long          time_current = 0;
 volatile int interruptCounter;
 int iTimer10;
 
@@ -94,6 +96,7 @@ unsigned int hover_time = 5000;
 unsigned int ex_time = 500;
 unsigned char patternNo = 0;
 unsigned char flag = 0;
+bool cnt_flag = false;
 
 //Prototype
 //------------------------------------------------------------------//
@@ -118,7 +121,7 @@ void setup() {
   while(!connected){
     delay(1);
   }
-  xTaskCreatePinnedToCore(&taskDisplay, "taskDisplay", 8192, NULL, 10, &task_handl, 0);
+  xTaskCreatePinnedToCore(&taskDisplay, "taskDisplay", 6144, NULL, 10, &task_handl, 0);
 
   // Create Log File
   fname_buff  = "/log/Satellite_log.csv";
@@ -187,19 +190,28 @@ void loop() {
       DuctedFan.attach(DuctedFanPin);
       DuctedFan.write(0);
       M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
+      time_buff2 = 0;
+      time_buff3 = 0;
       pattern = 112;
       break;
     
     case 112:
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(TFT_LIGHTGREY);
-      M5.Lcd.printf("%2d", time_buff2);
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(BLACK);
-      time_buff2 = (8000-(millis()-time_buff))/1000;
-      M5.Lcd.printf("%2d", time_buff2);
+      if(cnt_flag) {
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(TFT_LIGHTGREY);
+        M5.Lcd.printf("%2d", time_buff3);
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.printf("%2d", time_buff2);
+        cnt_flag = false;
+      }
+      time_buff3 = time_buff2;
+      time_buff2 = (10000-(millis()-time_buff))/1000;
+      if(time_buff2 < time_buff3) {
+        cnt_flag = true;
+      }
       if( millis() - time_buff >= 3000 ) {
         DuctedFan.write(hover_val);
         pattern = 113;
@@ -207,47 +219,53 @@ void loop() {
       break;
     
     case 113:
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(TFT_LIGHTGREY);
-      M5.Lcd.printf("%2d", time_buff2);
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(BLACK);
-      time_buff2 = (8000-(millis()-time_buff))/1000;
-      M5.Lcd.printf("%2d", time_buff2);
-      if( millis() - time_buff >= 6000 ) {
+      if(cnt_flag) {
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(TFT_LIGHTGREY);
+        M5.Lcd.printf("%2d", time_buff3);
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.printf("%2d", time_buff2);
+        cnt_flag = false;
+      }
+      time_buff3 = time_buff2;
+      time_buff2 = (10000-(millis()-time_buff))/1000;
+      if(time_buff2 < time_buff3) {
+        cnt_flag = true;
+      }
+      if( millis() - time_buff >= 7000 ) {
         log_flag = true;
         pattern = 114;
       }
       break;
 
     case 114:
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(TFT_LIGHTGREY);
-      M5.Lcd.printf("%2d", time_buff2);
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(BLACK);
-      time_buff2 = (8000-(millis()-time_buff))/1000;
-      M5.Lcd.printf("%2d", time_buff2);
-      if( millis() - time_buff >= 8000 ) {
+      if(cnt_flag) {
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(TFT_LIGHTGREY);
+        M5.Lcd.printf("%2d", time_buff3);
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.printf("%2d", time_buff2);
+        cnt_flag = false;
+      }
+      time_buff3 = time_buff2;
+      time_buff2 = (10000-(millis()-time_buff))/1000;
+      if(time_buff2 < time_buff3) {
+        cnt_flag = true;
+      }
+      if( millis() - time_buff >= 10000 ) {
+        M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
         time_buff = millis();
         pattern = 115;
       }
       break;
     
     case 115:
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(TFT_LIGHTGREY);
-      M5.Lcd.printf("%2d", time_buff2);
-      M5.Lcd.setTextSize(4);
-      M5.Lcd.setCursor(8, 36);
-      M5.Lcd.setTextColor(BLACK);
-      time_buff2 = (8000-(millis()-time_buff))/1000;
-      M5.Lcd.printf("%2d", time_buff2);
       if( millis() - time_buff >= parameters[patternNo][2] ) {
         pattern = 0;
         M5.Lcd.setTextSize(3);
@@ -257,14 +275,16 @@ void loop() {
         M5.Lcd.setCursor(80, 40);
         M5.Lcd.setTextColor(WHITE);
         M5.Lcd.printf("Hover Disable");
-        DuctedFan.detach();
-        log_flag = false;
         M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
         M5.Lcd.setTextSize(4);
         M5.Lcd.setCursor(8, 36);
         M5.Lcd.setTextColor(BLACK);
         M5.Lcd.print("St");
-      }
+        cnt_flag = false;
+        DuctedFan.detach();
+        log_flag = false;
+        file.close();
+      }    
       break;
 
   }
@@ -352,7 +372,12 @@ void Timer_Interrupt( void ){
         IMU.gz = (float)IMU.gyroCount[2];
       }
 
-      file.print(millis());
+      time_current = 10000 - (millis() - time_buff);
+      if( pattern == 115 ) {
+        file.print(millis()-time_buff);
+      } else {
+        file.print(time_current * -1);
+      }
       file.print(",");
       file.print(pattern);
       file.print(",");
@@ -427,6 +452,7 @@ void receiveUDP(){
     patternNo = udp.read();
     udp_bb = udp.read();
     udp_flag = udp.read();
+    delay(20);
     M5.Lcd.setTextColor(WHITE);
     M5.Lcd.setTextSize(5);
     M5.Lcd.setCursor(0, 150);
@@ -436,6 +462,7 @@ void receiveUDP(){
     M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
     M5.Lcd.setCursor(80, 170);
     M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
+    delay(20);
   }
 }
  
@@ -449,7 +476,7 @@ void sendUDP(){
 }
  
 void button_action(){
-  if (M5.BtnA.wasPressed()) {
+  if (M5.BtnA.wasPressed() && pattern == 0) {
     hover_flag = !hover_flag;    
     if(hover_flag) {
         M5.Lcd.setTextSize(3);
@@ -473,7 +500,7 @@ void button_action(){
       M5.Lcd.printf("Hover Disable");
       DuctedFan.detach();
     }
-  } else if (M5.BtnB.wasPressed()) {
+  } else if (M5.BtnB.wasPressed() && pattern == 0) {
     M5.Lcd.setTextColor(TFT_DARKGREY);
     M5.Lcd.setTextSize(5);
     M5.Lcd.setCursor(0, 150);
@@ -501,9 +528,10 @@ void button_action(){
     M5.Lcd.setCursor(80, 170);
     M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
 
-  } else if (M5.BtnC.wasPressed()) {
+  } else if (M5.BtnC.wasPressed() && pattern == 0) {
     udp_pattern = 111;
     sendUDP();
+    udp_pattern = 0;
     pattern = 111;
   }
 } 
