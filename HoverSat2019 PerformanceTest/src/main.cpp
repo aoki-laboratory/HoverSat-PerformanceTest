@@ -16,11 +16,15 @@
 #include <WiFiUdp.h>
 #include <Wire.h>
 #include <time.h>
+#include <EEPROM.h>
 #include "utility/MPU9250.h"
 
 //Define
 //------------------------------------------------------------------//
 #define TIMER_INTERRUPT       5
+
+#define ASCALE 2        // 0:2G, 1:4G, 2:8G, 3:16G
+#define GSCALE 1        // 0:250dps, 1:500dps, 2:1000dps, 3:2000dps
 
 #define NOOFPATTERNS 5
 int parameters[NOOFPATTERNS][3] =
@@ -92,6 +96,8 @@ unsigned char battery_persent;
 // Parameters
 unsigned char hover_val = 70;
 bool hover_flag = false;
+bool hover_flag2 = false;
+unsigned char hover_pattern = 0;
 unsigned int hover_time = 5000;
 unsigned int ex_time = 500;
 unsigned char patternNo = 0;
@@ -145,6 +151,26 @@ void setup() {
   IMU.calibrateMPU9250(IMU.gyroBias, IMU.accelBias);
   IMU.initMPU9250();
 
+  if(GSCALE == 0) {
+    IMU.writeByte(MPU9250_ADDRESS, GYRO_CONFIG, 0x00);  // 250dps
+  } else if(GSCALE == 1) {
+    IMU.writeByte(MPU9250_ADDRESS, GYRO_CONFIG, 0x08);  // 500dps
+  } else if(GSCALE == 2) {
+    IMU.writeByte(MPU9250_ADDRESS, GYRO_CONFIG, 0x10);  // 1000dps
+  } else {
+    IMU.writeByte(MPU9250_ADDRESS, GYRO_CONFIG, 0x18);  // 2000dps
+  }
+
+  if(ASCALE == 0) {
+    IMU.writeByte(MPU9250_ADDRESS, ACCEL_CONFIG, 0x00); // 2G
+  } else if(ASCALE == 1) {
+    IMU.writeByte(MPU9250_ADDRESS, ACCEL_CONFIG, 0x08); // 4G
+  } else if(ASCALE == 2) {
+    IMU.writeByte(MPU9250_ADDRESS, ACCEL_CONFIG, 0x10); // 8G
+  } else {
+    IMU.writeByte(MPU9250_ADDRESS, ACCEL_CONFIG, 0x18); // 16G
+  }
+
   // Initialize Timer Interrupt
   timer = timerBegin(0, 80, true);
   timerAttachInterrupt(timer, &onTimer, true);
@@ -177,7 +203,6 @@ void loop() {
       break; 
     
     case 111:    
-      //M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
       time_buff = millis();
       hover_flag = true;
       M5.Lcd.setTextSize(3);
@@ -259,7 +284,6 @@ void loop() {
         cnt_flag = true;
       }
       if( millis() - time_buff >= 10000 ) {
-        M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
         time_buff = millis();
         pattern = 115;
       }
@@ -268,6 +292,10 @@ void loop() {
     case 115:
       if( millis() - time_buff >= parameters[patternNo][2] ) {
         pattern = 0;
+        cnt_flag = false;
+        DuctedFan.detach();
+        log_flag = false;
+        delay(50);
         M5.Lcd.setTextSize(3);
         M5.Lcd.setCursor(80, 40);
         M5.Lcd.setTextColor(TFT_DARKGREY);
@@ -280,9 +308,6 @@ void loop() {
         M5.Lcd.setCursor(8, 36);
         M5.Lcd.setTextColor(BLACK);
         M5.Lcd.print("St");
-        cnt_flag = false;
-        DuctedFan.detach();
-        log_flag = false;
         file.close();
       }    
       break;
@@ -294,6 +319,8 @@ void loop() {
 //------------------------------------------------------------------//
 void taskDisplay(void *pvParameters){
 
+  EEPROM.begin(128);
+  hover_val = EEPROM.read(0);
   taskInit();  
 
   while(1){    
@@ -476,8 +503,77 @@ void sendUDP(){
 }
  
 void button_action(){
-  if (M5.BtnA.wasPressed() && pattern == 0) {
-    hover_flag = !hover_flag;    
+  if ((M5.BtnA.wasPressed() && pattern == 0) || hover_flag2) {
+    switch (hover_pattern) {
+    case 0:
+      if(hover_flag) {
+        hover_pattern = 5;
+        break;
+      }
+      hover_flag = true;
+      M5.Lcd.setTextSize(3);
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(TFT_DARKGREY);
+      M5.Lcd.printf("Hover Disable");
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.printf("Hover PWM %3d", hover_val);
+      DuctedFan.attach(DuctedFanPin);
+      DuctedFan.write(0);
+      hover_flag2 = true;
+      hover_pattern = 1;
+      time_buff3 = millis();
+      break;
+    
+    case 1:
+      if(millis()-time_buff3 >= 3000) {
+        M5.Lcd.setCursor(80, 40);
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.printf("Hover PWM %3d", hover_val);  
+        hover_pattern = 2;
+        break;
+      }
+      M5.Lcd.setTextSize(3);
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(TFT_DARKGREY);
+      M5.Lcd.printf("          %3d", hover_val);
+      if(M5.BtnA.wasPressed()) {
+        hover_val += 5;
+        if(hover_val > 100) {
+          hover_val = 60;
+        }     
+      }     
+      EEPROM.write(0, hover_val);
+      EEPROM.commit();
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.printf("          %3d", hover_val); 
+      break;
+    
+    case 2:       
+      DuctedFan.write(hover_val);
+      hover_pattern = 0;
+      break;
+
+    case 5:  
+      if(M5.BtnA.wasPressed()) {  
+        M5.Lcd.setTextSize(3);
+        M5.Lcd.setCursor(80, 40);
+        M5.Lcd.setTextColor(TFT_DARKGREY);
+        M5.Lcd.printf("Hover PWM %3d", hover_val);
+        M5.Lcd.setCursor(80, 40);
+        M5.Lcd.setTextColor(WHITE);
+        M5.Lcd.printf("Hover Disable");
+        DuctedFan.detach();
+        hover_flag = false;
+        hover_flag2 = false;
+        hover_pattern = 0;
+      }
+      break;
+
+    }
+
+    /*hover_flag = !hover_flag;    
     if(hover_flag) {
         M5.Lcd.setTextSize(3);
         M5.Lcd.setCursor(80, 40);
@@ -499,7 +595,7 @@ void button_action(){
       M5.Lcd.setTextColor(WHITE);
       M5.Lcd.printf("Hover Disable");
       DuctedFan.detach();
-    }
+    }*/
   } else if (M5.BtnB.wasPressed() && pattern == 0) {
     M5.Lcd.setTextColor(TFT_DARKGREY);
     M5.Lcd.setTextSize(5);
