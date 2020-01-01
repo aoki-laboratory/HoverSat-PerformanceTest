@@ -106,7 +106,8 @@ void Timer_Interrupt(void);
 void LCD_Control(void);
 void connectToWiFi(void);
 void WiFiEvent(WiFiEvent_t event);
-uint8_t getBatteryGauge();
+uint8_t getBatteryGauge(void);
+void taskInit(void);
 
 //Setup #1
 //------------------------------------------------------------------//
@@ -171,6 +172,100 @@ void loop() {
         pattern = 0;
       }
       break; 
+    
+    case 111:    
+      //M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
+      time_buff = millis();
+      hover_flag = true;
+      M5.Lcd.setTextSize(3);
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(TFT_DARKGREY);
+      M5.Lcd.printf("Hover Disable");
+      M5.Lcd.setCursor(80, 40);
+      M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.printf("Hover PWM %3d", hover_val);
+      DuctedFan.attach(DuctedFanPin);
+      DuctedFan.write(0);
+      M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
+      pattern = 112;
+      break;
+    
+    case 112:
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(TFT_LIGHTGREY);
+      M5.Lcd.printf("%2d", time_buff2);
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(BLACK);
+      time_buff2 = (8000-(millis()-time_buff))/1000;
+      M5.Lcd.printf("%2d", time_buff2);
+      if( millis() - time_buff >= 3000 ) {
+        DuctedFan.write(hover_val);
+        pattern = 113;
+      }
+      break;
+    
+    case 113:
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(TFT_LIGHTGREY);
+      M5.Lcd.printf("%2d", time_buff2);
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(BLACK);
+      time_buff2 = (8000-(millis()-time_buff))/1000;
+      M5.Lcd.printf("%2d", time_buff2);
+      if( millis() - time_buff >= 6000 ) {
+        log_flag = true;
+        pattern = 114;
+      }
+      break;
+
+    case 114:
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(TFT_LIGHTGREY);
+      M5.Lcd.printf("%2d", time_buff2);
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(BLACK);
+      time_buff2 = (8000-(millis()-time_buff))/1000;
+      M5.Lcd.printf("%2d", time_buff2);
+      if( millis() - time_buff >= 8000 ) {
+        time_buff = millis();
+        pattern = 115;
+      }
+      break;
+    
+    case 115:
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(TFT_LIGHTGREY);
+      M5.Lcd.printf("%2d", time_buff2);
+      M5.Lcd.setTextSize(4);
+      M5.Lcd.setCursor(8, 36);
+      M5.Lcd.setTextColor(BLACK);
+      time_buff2 = (8000-(millis()-time_buff))/1000;
+      M5.Lcd.printf("%2d", time_buff2);
+      if( millis() - time_buff >= parameters[patternNo][2] ) {
+        pattern = 0;
+        M5.Lcd.setTextSize(3);
+        M5.Lcd.setCursor(80, 40);
+        M5.Lcd.setTextColor(TFT_DARKGREY);
+        M5.Lcd.printf("Hover PWM %3d", hover_val);
+        M5.Lcd.setCursor(80, 40);
+        M5.Lcd.setTextColor(WHITE);
+        M5.Lcd.printf("Hover Disable");
+        DuctedFan.detach();
+        log_flag = false;
+        M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
+        M5.Lcd.setTextSize(4);
+        M5.Lcd.setCursor(8, 36);
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.print("St");
+      }
+      break;
 
   }
 }
@@ -179,46 +274,7 @@ void loop() {
 //------------------------------------------------------------------//
 void taskDisplay(void *pvParameters){
 
-  M5.Lcd.fillRect(0, 0, 320, 20, TFT_WHITE);
-  M5.Lcd.fillRect(60, 20, 260, 60, TFT_DARKGREY);
-  M5.Lcd.fillRect(0, 80, 60, 160, TFT_DARKGREY);
-  M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
-  M5.Lcd.fillRect(0, 220, 320, 20, TFT_WHITE);
-
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(8, 2);
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.print("HoverSat u Test");
-  M5.Lcd.setCursor(40, 222);
-  M5.Lcd.print("HOVER");
-  M5.Lcd.setCursor(140, 222);
-  M5.Lcd.print("MODE");
-  M5.Lcd.setCursor(228, 222);
-  M5.Lcd.print("START");
-  M5.Lcd.setTextSize(4);
-  M5.Lcd.setCursor(8, 36);
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.print("St");
-  M5.Lcd.setTextSize(3);
-  M5.Lcd.setCursor(80, 40);
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.printf("Hover Disable");
-  M5.Lcd.setTextSize(3);
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setCursor(8, 110);
-  M5.Lcd.print("No.");
-
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setTextSize(5);
-  M5.Lcd.setCursor(0, 150);
-  M5.Lcd.printf("%2d", patternNo+1);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(80, 120);
-  M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(80, 170);
-  M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
-  
+  taskInit();  
 
   while(1){    
     M5.update();
@@ -235,7 +291,7 @@ void taskDisplay(void *pvParameters){
       break;
     }
 
-     core0_pattern++;
+    core0_pattern++;
     delay(1);
     cnt_battery++;
     if( cnt_battery >= 5000 && !log_flag ) {
@@ -280,32 +336,33 @@ void Timer_Interrupt( void ){
     interruptCounter--;
     portEXIT_CRITICAL(&timerMux);
 
-    // If intPin goes high, all data registers have new data
-    // On interrupt, check if data ready interrupt
-    if (IMU.readByte(MPU9250_ADDRESS, INT_STATUS) & 0x01) {  
-      IMU.readAccelData(IMU.accelCount);  // Read the x/y/z adc values
-      IMU.getAres();
+    if( log_flag ) {
+      // If intPin goes high, all data registers have new data
+      // On interrupt, check if data ready interrupt
+      if (IMU.readByte(MPU9250_ADDRESS, INT_STATUS) & 0x01) {  
+        IMU.readAccelData(IMU.accelCount);  // Read the x/y/z adc values
+        IMU.getAres();
 
-      IMU.ax = (float)IMU.accelCount[0]; // - accelBias[0];
-      IMU.ay = (float)IMU.accelCount[1]; // - accelBias[1];
+        IMU.ax = (float)IMU.accelCount[0]; // - accelBias[0];
+        IMU.ay = (float)IMU.accelCount[1]; // - accelBias[1];
 
-      IMU.readGyroData(IMU.gyroCount);  // Read the x/y/z adc values
-      IMU.getGres();
+        IMU.readGyroData(IMU.gyroCount);  // Read the x/y/z adc values
+        IMU.getGres();
 
-      IMU.gz = (float)IMU.gyroCount[2];
+        IMU.gz = (float)IMU.gyroCount[2];
+      }
+
+      file.print(millis());
+      file.print(",");
+      file.print(pattern);
+      file.print(",");
+      file.print(IMU.ax);
+      file.print(",");
+      file.print(IMU.ay);
+      file.print(",");
+      file.print(IMU.gz);
+      file.println(",");
     }
-
-    file.print(millis());
-    file.print(",");
-    file.print(pattern);
-    file.print(",");
-    file.print(IMU.ax);
-    file.print(",");
-    file.print(IMU.ay);
-    file.print(",");
-    file.print(IMU.gz);
-    file.println(",");
-
   }
 }
 
@@ -404,7 +461,6 @@ void button_action(){
         M5.Lcd.printf("Hover PWM %3d", hover_val);
         DuctedFan.attach(DuctedFanPin);
         DuctedFan.write(0);
-        time_buff2 = millis();
         delay(3000);
         DuctedFan.write(hover_val); 
     } else {
@@ -448,7 +504,7 @@ void button_action(){
   } else if (M5.BtnC.wasPressed()) {
     udp_pattern = 111;
     sendUDP();
-    pattern = 11;
+    pattern = 111;
   }
 } 
 
@@ -462,3 +518,44 @@ uint8_t getBatteryGauge() {
   return 0xff;
 }
 
+void taskInit() {
+  M5.Lcd.fillRect(0, 0, 320, 20, TFT_WHITE);
+  M5.Lcd.fillRect(60, 20, 260, 60, TFT_DARKGREY);
+  M5.Lcd.fillRect(0, 80, 60, 160, TFT_DARKGREY);
+  M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
+  M5.Lcd.fillRect(0, 220, 320, 20, TFT_WHITE);
+
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(8, 2);
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.print("HoverSat u Test");
+  M5.Lcd.setCursor(40, 222);
+  M5.Lcd.print("HOVER");
+  M5.Lcd.setCursor(140, 222);
+  M5.Lcd.print("MODE");
+  M5.Lcd.setCursor(228, 222);
+  M5.Lcd.print("START");
+  M5.Lcd.setTextSize(4);
+  M5.Lcd.setCursor(8, 36);
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.print("St");
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.setCursor(80, 40);
+  M5.Lcd.setTextColor(WHITE);
+  M5.Lcd.printf("Hover Disable");
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.setTextColor(WHITE);
+  M5.Lcd.setCursor(8, 110);
+  M5.Lcd.print("No.");
+
+  M5.Lcd.setTextColor(WHITE);
+  M5.Lcd.setTextSize(5);
+  M5.Lcd.setCursor(0, 150);
+  M5.Lcd.printf("%2d", patternNo+1);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(80, 120);
+  M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(80, 170);
+  M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
+}
