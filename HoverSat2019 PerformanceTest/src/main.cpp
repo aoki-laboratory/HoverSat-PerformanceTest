@@ -141,6 +141,8 @@ void setup() {
   IMU.calibrateMPU9250(IMU.gyroBias, IMU.accelBias);
   IMU.initMPU9250();
 
+  IMU.writeByte(MPU9250_ADDRESS, CONFIG, 0x00);
+
   if(GSCALE == 0) {
     IMU.writeByte(MPU9250_ADDRESS, GYRO_CONFIG, 0x00);  // 250dps
   } else if(GSCALE == 1) {
@@ -556,10 +558,15 @@ void button_action(){
       M5.Lcd.setTextColor(TFT_DARKGREY);
       M5.Lcd.printf("          %3d", hover_val);
       if(M5.BtnA.wasPressed()) {
-        hover_val += 5;
-        if(hover_val > 100) {
+        if( hover_val == 0 ) {
           hover_val = 60;
-        }     
+        } else {
+          hover_val += 5;
+          if(hover_val > 100) {
+            hover_val = 0;
+          }  
+        }
+           
       }     
       EEPROM.write(0, hover_val);
       EEPROM.commit();
