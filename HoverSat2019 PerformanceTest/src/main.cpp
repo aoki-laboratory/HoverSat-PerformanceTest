@@ -30,10 +30,10 @@
 int parameters[NOOFPATTERNS][3] =
 {
 // PWM, EjctionTime, HoverTime
-{ 20, 100, 5000 },
-{ 40, 200, 5000 },
-{ 60, 300, 5000 },
-{ 80, 400, 5000 },
+{ 20, 500, 5000 },
+{ 40, 500, 5000 },
+{ 60, 500, 5000 },
+{ 80, 500, 5000 },
 { 100, 500, 5000 },
 };
 
@@ -48,7 +48,8 @@ const int my_server_udp_port = 55556;
 
 unsigned char udp_pattern = 0;
 unsigned char udp_No = 0;
-unsigned char udp_bb = 0;
+unsigned char udp_SH = 0;
+unsigned char udp_SL = 0;
 unsigned char udp_flag = 0;
 
 unsigned char pattern = 0;
@@ -103,6 +104,7 @@ unsigned int ex_time = 500;
 unsigned char patternNo = 0;
 unsigned char flag = 0;
 bool cnt_flag = false;
+unsigned int totalSeaquence = 0;
 
 //Prototype
 //------------------------------------------------------------------//
@@ -129,20 +131,8 @@ void setup() {
   }
   xTaskCreatePinnedToCore(&taskDisplay, "taskDisplay", 6144, NULL, 10, &task_handl, 0);
 
-  // Create Log File
-  fname_buff  = "/log/Satellite_log.csv";
-  fname = fname_buff.c_str();
-
   SD.begin(4, SPI, 24000000);
-  // Create Log File
-  file = SD.open(fname, FILE_APPEND);
-  if( !file ) {
-    M5.Lcd.setTextSize(3);
-    M5.Lcd.setTextColor(WHITE);
-    M5.Lcd.setCursor(5, 160);
-    M5.Lcd.println("Failed to open sd");
-  }
-
+  
   // Initialize IIC
   Wire.begin();
   Wire.setClock(400000);
@@ -190,14 +180,12 @@ void loop() {
       break;
 
     case 11:    
-      M5.Lcd.fillRect(0, 0, 80, 80, TFT_RED);
       time_buff = millis();
       pattern = 12;
       break;
 
     case 12:
       if( millis() - time_buff >= ex_time ) {
-        M5.Lcd.fillRect(0, 0, 80, 80, TFT_DARKGREY);
         pattern = 0;
       }
       break; 
@@ -217,6 +205,23 @@ void loop() {
       M5.Lcd.fillRect(0, 20, 60, 60, TFT_LIGHTGREY);
       time_buff2 = 0;
       time_buff3 = 0;
+      M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.setTextSize(2);
+      M5.Lcd.setCursor(80, 100);
+      M5.Lcd.printf("ID        %08d", totalSeaquence);
+      // Create Log File
+      fname_buff  = "/log/Satellite_log_"
+                  +(String)totalSeaquence
+                  +".csv";
+      fname = fname_buff.c_str();
+      // Create Log File
+      file = SD.open(fname, FILE_APPEND);
+      if( !file ) {
+        M5.Lcd.setTextSize(3);
+        M5.Lcd.setTextColor(WHITE);
+        M5.Lcd.setCursor(5, 160);
+        M5.Lcd.println("Failed to open sd");
+      }
       pattern = 112;
       break;
     
@@ -309,6 +314,10 @@ void loop() {
         M5.Lcd.setTextColor(BLACK);
         M5.Lcd.print("St");
         file.close();
+        M5.Lcd.setTextColor(BLACK);
+        M5.Lcd.setTextSize(2);
+        M5.Lcd.setCursor(80, 100);
+        M5.Lcd.printf("ID        %08d", totalSeaquence);
       }    
       break;
 
@@ -321,7 +330,10 @@ void taskDisplay(void *pvParameters){
 
   EEPROM.begin(128);
   hover_val = EEPROM.read(0);
-  taskInit();  
+  totalSeaquence = (EEPROM.read(102)<<8) + EEPROM.read(101);
+  taskInit(); 
+
+  
 
   while(1){    
     M5.update();
@@ -471,33 +483,39 @@ void receiveUDP(){
     M5.Lcd.printf("%2d", patternNo+1);
     M5.Lcd.setTextColor(BLACK);
     M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(80, 120);
+    M5.Lcd.setCursor(80, 145);
     M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
-    M5.Lcd.setCursor(80, 170);
-    M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
+    M5.Lcd.setCursor(80, 190);
+    M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);    
+    udp_SH = udp.read();
+    udp_SL = udp.read();
+    totalSeaquence = (udp_SH<<8) + udp_SL;
     pattern = udp.read();
     patternNo = udp.read();
-    udp_bb = udp.read();
     udp_flag = udp.read();
+    EEPROM.write(101, totalSeaquence&0x0F);
+    EEPROM.write(102, (totalSeaquence>>8)&0x0F);
+    EEPROM.commit();
     delay(20);
     M5.Lcd.setTextColor(WHITE);
     M5.Lcd.setTextSize(5);
     M5.Lcd.setCursor(0, 150);
     M5.Lcd.printf("%2d", patternNo+1);
     M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(80, 120);
+    M5.Lcd.setCursor(80, 145);
     M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
-    M5.Lcd.setCursor(80, 170);
+    M5.Lcd.setCursor(80, 190);
     M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
     delay(20);
   }
 }
  
 void sendUDP(){
-  udp.beginPacket(to_udp_address, to_udp_port);
+  udp.beginPacket(to_udp_address, to_udp_port);  
+  udp.write(udp_SH);
+  udp.write(udp_SL);
   udp.write(udp_pattern);
   udp.write(udp_No);
-  udp.write(udp_bb);
   udp.write(udp_flag);
   udp.endPacket();
 }
@@ -573,29 +591,6 @@ void button_action(){
 
     }
 
-    /*hover_flag = !hover_flag;    
-    if(hover_flag) {
-        M5.Lcd.setTextSize(3);
-        M5.Lcd.setCursor(80, 40);
-        M5.Lcd.setTextColor(TFT_DARKGREY);
-        M5.Lcd.printf("Hover Disable");
-        M5.Lcd.setCursor(80, 40);
-        M5.Lcd.setTextColor(WHITE);
-        M5.Lcd.printf("Hover PWM %3d", hover_val);
-        DuctedFan.attach(DuctedFanPin);
-        DuctedFan.write(0);
-        delay(3000);
-        DuctedFan.write(hover_val); 
-    } else {
-      M5.Lcd.setTextSize(3);
-      M5.Lcd.setCursor(80, 40);
-      M5.Lcd.setTextColor(TFT_DARKGREY);
-      M5.Lcd.printf("Hover PWM %3d", hover_val);
-      M5.Lcd.setCursor(80, 40);
-      M5.Lcd.setTextColor(WHITE);
-      M5.Lcd.printf("Hover Disable");
-      DuctedFan.detach();
-    }*/
   } else if (M5.BtnB.wasPressed() && pattern == 0) {
     M5.Lcd.setTextColor(TFT_DARKGREY);
     M5.Lcd.setTextSize(5);
@@ -603,9 +598,9 @@ void button_action(){
     M5.Lcd.printf("%2d", patternNo+1);
     M5.Lcd.setTextColor(BLACK);
     M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(80, 120);
+    M5.Lcd.setCursor(80, 145);
     M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
-    M5.Lcd.setCursor(80, 170);
+    M5.Lcd.setCursor(80, 190);
     M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
 
     patternNo++;
@@ -619,15 +614,21 @@ void button_action(){
     M5.Lcd.setCursor(0, 150);
     M5.Lcd.printf("%2d", patternNo+1);
     M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(80, 120);
+    M5.Lcd.setCursor(80, 145);
     M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
-    M5.Lcd.setCursor(80, 170);
+    M5.Lcd.setCursor(80, 190);
     M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
 
-  } else if (M5.BtnC.wasPressed() && pattern == 0) {
+  } else if (M5.BtnC.wasPressed() && pattern == 0) {    
+    totalSeaquence++;
+    udp_SL = totalSeaquence&0x0F;
+    udp_SH = (totalSeaquence>>8)&0x0F;    
     udp_pattern = 111;
     sendUDP();
     udp_pattern = 0;
+    EEPROM.write(101, totalSeaquence&0x0F);
+    EEPROM.write(102, (totalSeaquence>>8)&0x0F);
+    EEPROM.commit();
     pattern = 111;
   }
 } 
@@ -643,6 +644,7 @@ uint8_t getBatteryGauge() {
 }
 
 void taskInit() {
+  disableCore0WDT();
   M5.Lcd.fillRect(0, 0, 320, 20, TFT_WHITE);
   M5.Lcd.fillRect(60, 20, 260, 60, TFT_DARKGREY);
   M5.Lcd.fillRect(0, 80, 60, 160, TFT_DARKGREY);
@@ -677,9 +679,10 @@ void taskInit() {
   M5.Lcd.setCursor(0, 150);
   M5.Lcd.printf("%2d", patternNo+1);
   M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(80, 120);
+  M5.Lcd.setCursor(80, 145);
   M5.Lcd.printf("Ejection Time %4d", parameters[patternNo][1]);
   M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(80, 170);
+  M5.Lcd.setCursor(80, 190);
   M5.Lcd.printf("Hovering Time %4d", parameters[patternNo][2]);
 }
+
